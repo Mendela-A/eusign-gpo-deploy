@@ -34,7 +34,7 @@ try {
     # === Share availability (no network = not an error on boot) ===
     if (-not (Test-Path $shareExe)) {
         Write-Log "Share unreachable or installer missing: $shareExe" 'WARN'
-        exit 0
+        return
     }
 
     # === Copy installer ===

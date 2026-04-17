@@ -1,0 +1,9 @@
+# PowerShell / Windows artifacts
+*.log
+*.bak
+*.lock
+*.tmp
+
+# Installer outputs that might land here by accident
+EUSignWebInstall*.exe
+*.sha256

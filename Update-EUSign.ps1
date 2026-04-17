@@ -95,7 +95,8 @@ try {
     }
 
     # --- Download with retry ---
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     Remove-Item $tempExe -Force -ErrorAction SilentlyContinue
 
     $downloaded = $false
@@ -167,8 +168,10 @@ try {
         $hash = (Get-FileHash $stagingExe -Algorithm SHA256).Hash
         Set-Content -Path $stagingHash -Value $hash -Encoding ASCII
 
-        Move-Item $stagingExe  $shareExe  -Force
+        # Hash first so partial failure leaves (new-hash, old-exe) — client fails
+        # fast on mismatch, instead of (new-exe, old-hash) which looks like tamper.
         Move-Item $stagingHash $shareHash -Force
+        Move-Item $stagingExe  $shareExe  -Force
 
         Write-Log "Updated: $currentVersion -> $newVersion (SHA256: $hash)"
     }
