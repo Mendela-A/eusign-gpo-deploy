@@ -1,78 +1,71 @@
 # EUSign GPO Auto-Deploy
 
-Автоматичне розгортання [EUSign](https://iit.com.ua) (IIT Користувач ЦСК-1) у домені через GPO.
+Два PowerShell-скрипти для автоматичного розгортання [EUSign](https://iit.com.ua)
+(IIT Користувач ЦСК-1) у Windows-домені через GPO.
 
-## Архітектура
+## Як це працює
 
-- **`Update-EUSign.ps1`** — на DC, Scheduled Task щодня о 06:00. Качає актуальний інсталятор з iit.com.ua на файлову шару.
-- **`EUSign.ps1`** — на клієнтах, GPO Startup Script. Порівнює версії й тихо встановлює.
-
-## Update-EUSign.ps1
-
-Завантажує `EUSignWebInstall.exe` з iit.com.ua, валідує його й атомарно оновлює файл на шарі.
-
-### Що робить
-
-1. Читає поточну версію інсталятора з шари
-2. Завантажує свіжий з iit.com.ua (з retry)
-3. Перевіряє розмір (≥ 1 MB) та Authenticode-підпис
-4. Порівнює версії — якщо актуальна, виходить
-5. Атомарно замінює файл + пише SHA256 поряд
-6. Логує в `Logs\DC_Update.log` (ротація 5 MB × 5 бекапів)
-
-### Запуск
-
-```powershell
-# Production (від Scheduled Task / SYSTEM)
-powershell.exe -ExecutionPolicy Bypass -File "C:\tmp\Scripts\EUSign\Update-EUSign.ps1"
-
-# Тестовий прогон без змін
-.\Update-EUSign.ps1 -WhatIf
-
-# З виводом у консоль
-.\Update-EUSign.ps1 -Verbose
+```
+iit.com.ua ──► [DC] Update-EUSign.ps1 ──► \\share\EUSign\ ──► [клієнт] EUSign.ps1 ──► install
+     (HTTPS)        щодня о 06:00             exe + .sha256       GPO Startup
 ```
 
-### Параметри
+- **`Update-EUSign.ps1`** — на контролері домену, Scheduled Task. Раз на добу
+  качає свіжий `EUSignWebInstall.exe` з iit.com.ua, валідує підпис та розмір,
+  атомарно кладе файл на файлову шару разом з `.sha256`.
+- **`EUSign.ps1`** — на клієнтах, GPO Startup Script. Копіює інсталятор із шари,
+  звіряє SHA256, порівнює версії, тихо встановлює якщо треба.
+
+## Налаштування
+
+### 1. DC: Update-EUSign.ps1
+
+Покладіть скрипт куди зручно (напр. `C:\Scripts\EUSign\Update-EUSign.ps1`).
+Створіть Scheduled Task від `SYSTEM`:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File "C:\Scripts\EUSign\Update-EUSign.ps1" -ShareDir "C:\Shares\EUSign"
+```
+
+Параметри (всі опційні):
 
 | Параметр | За замовчуванням | Опис |
 |---|---|---|
 | `-Url` | `https://iit.com.ua/download/productfiles/EUSignWebInstall.exe` | URL інсталятора |
-| `-ShareDir` | `C:\tmp\Scripts\EUSign` | Локальний шлях до шари |
-| `-MinFileSize` | `1MB` | Мінімальний розмір завантаженого файлу |
-| `-MaxRetries` | `3` | Кількість спроб завантаження |
-| `-RetryDelay` | `15` | Базова затримка між спробами (сек, з backoff) |
-| `-MaxLogSize` | `5MB` | Розмір для ротації логу |
-| `-KeepBackups` | `5` | Кількість архівних логів |
+| `-ShareDir` | `C:\doctors-data\Scripts\EUSign` | Локальний шлях до шари |
+| `-MinFileSize` | `1MB` | Мінімальний розмір exe |
+| `-MaxRetries` | `3` | Спроб завантаження |
+| `-RetryDelay` | `15` | Базова пауза між спробами (сек, з backoff) |
+| `-MaxLogSize` | `5MB` | Поріг ротації логу |
+| `-KeepBackups` | `5` | Архівних логів |
 
-### Exit codes
+Exit codes: `0` OK, `1` download fail, `2` validation fail, `3` unhandled.
 
-| Код | Значення |
-|---|---|
-| `0` | OK / вже актуальна версія |
-| `1` | Помилка завантаження |
-| `2` | Помилка валідації (підпис, розмір, версія) |
-| `3` | Необроблена помилка |
+Логи: `{ShareDir}\Logs\DC_Update.log`.
 
-### Scheduled Task
+### 2. Клієнти: EUSign.ps1
 
-| Параметр | Значення |
-|---|---|
-| Назва | `EUSign Update` |
-| Від | `SYSTEM` |
-| Тригер | Щодня о 06:00 |
-| Команда | `powershell.exe -ExecutionPolicy Bypass -File "C:\doctors-data\Scripts\EUSign\Update-EUSign.ps1"` |
-
-| або з вказанням папки
-  powershell.exe -ExecutionPolicy Bypass -File "D:\Shares\EUSign\Update-EUSign.ps1" -ShareDir "D:\Shares\EUSign"
-
-
-### Логи
+У `EUSign.ps1` один рядок під ваше середовище:
 
 ```powershell
-Get-Content 'C:\tmp\Scripts\EUSign\Logs\DC_Update.log' -Tail 50
+$share = '\\dc-001\doctors-data\Scripts\EUSign'
+```
+
+Далі підключіть скрипт як **GPO → Computer Configuration → Policies →
+Windows Settings → Scripts → Startup**.
+
+Логи на клієнті: `C:\Windows\Temp\EUSign_<HOSTNAME>_<дата>.log`.
+
+## Тестовий запуск
+
+```powershell
+# Dry-run на DC, без змін на шарі
+.\Update-EUSign.ps1 -WhatIf -Verbose
+
+# Ручний прогін на клієнті
+powershell.exe -ExecutionPolicy Bypass -File .\EUSign.ps1
 ```
 
 ## License
 
-Internal use only.
+MIT (див. [LICENSE](LICENSE)).

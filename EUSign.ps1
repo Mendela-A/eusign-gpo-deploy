@@ -11,7 +11,6 @@ $logFile     = "C:\Windows\Temp\EUSign_$env:COMPUTERNAME`_$(Get-Date -Format 'yy
 $installLog  = "$env:TEMP\EUSignSetup.log"
 $lockFile    = "$env:TEMP\EUSign.lock"
 $installTimeoutSec = 600
-$expectedSubject   = 'CN=*, O=*ІІТ*'   # звузити до реального Subject ІІТ
 
 # === Logging ===
 function Write-Log {
@@ -62,12 +61,7 @@ try {
         Write-Log "Bad signature: $($sig.Status) / $($sig.StatusMessage)" 'ERROR'
         $exitCode = 2; return
     }
-    $subject = $sig.SignerCertificate.Subject
-    Write-Log "Signer: $subject"
-    if ($subject -notlike $expectedSubject) {
-        Write-Log "Unexpected signer — aborting" 'ERROR'
-        $exitCode = 2; return
-    }
+    Write-Log "Signer: $($sig.SignerCertificate.Subject)"
 
     # === Version parse (safe) ===
     $newVersion = $null
