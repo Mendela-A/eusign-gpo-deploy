@@ -71,11 +71,16 @@ try {
     Write-Log "Installer version: $newVersion"
 
     # === Installed version check ===
+    # Guard PSObject.Properties lookup — not all Uninstall entries have DisplayIcon,
+    # and Set-StrictMode throws on missing-property access.
     $installed = Get-ItemProperty `
         'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' `
         -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayIcon -like '*EUNMHProcess*' } |
+        Where-Object {
+            $_.PSObject.Properties['DisplayIcon'] -and
+            $_.DisplayIcon -like '*EUNMHProcess*'
+        } |
         Select-Object -First 1
 
     if ($installed -and $newVersion) {
