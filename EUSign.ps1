@@ -65,7 +65,7 @@ try {
 
     # === Version parse (safe) ===
     $newVersion = $null
-    try { $newVersion = [Version](Get-Item $installer).VersionInfo.FileVersion } catch {
+    try { $newVersion = [Version](Get-Item $installer).VersionInfo.ProductVersion } catch {
         Write-Log "Cannot parse installer version — will install anyway" 'WARN'
     }
     Write-Log "Installer version: $newVersion"
